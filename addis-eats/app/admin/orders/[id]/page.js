@@ -70,28 +70,29 @@ export default async function AdminOrderDetailsPage({ params }) {
           <h2 id="order-items">Items</h2>
           <div className="table-wrap">
             <table className="admin-table">
+              <caption>Items in order {order.id}, prices in Ethiopian birr</caption>
               <thead>
                 <tr>
-                  <th>Dish</th>
-                  <th>Qty</th>
-                  <th>Price</th>
-                  <th>Subtotal</th>
+                  <th scope="col">Dish</th>
+                  <th scope="col" className="numeric-cell">Qty</th>
+                  <th scope="col" className="numeric-cell">Price (ETB)</th>
+                  <th scope="col" className="numeric-cell">Subtotal (ETB)</th>
                 </tr>
               </thead>
               <tbody>
                 {order.items.map((item) => (
                   <tr key={item.id}>
                     <td>{item.name}</td>
-                    <td>{item.quantity}</td>
-                    <td>{item.price.toLocaleString("en-US")} ETB</td>
-                    <td>{(item.price * item.quantity).toLocaleString("en-US")} ETB</td>
+                    <td className="numeric-cell">{item.quantity}</td>
+                    <td className="numeric-cell">{item.price.toLocaleString("en-US")}</td>
+                    <td className="numeric-cell">{(item.price * item.quantity).toLocaleString("en-US")}</td>
                   </tr>
                 ))}
               </tbody>
               <tfoot>
                 <tr>
-                  <td colSpan={3}>Total</td>
-                  <td>
+                  <td colSpan={3} className="numeric-cell">Total (ETB)</td>
+                  <td className="numeric-cell">
                     <strong>{order.total.toLocaleString("en-US")} ETB</strong>
                   </td>
                 </tr>

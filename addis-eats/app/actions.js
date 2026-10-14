@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { signInSchema, signUpSchema } from "../lib/authSchema";
 import { orderSchema, fieldErrors } from "../lib/orderSchema";
-import { createOrder, cancelOwnedOrder, advanceOrderStatus } from "../lib/orders";
+import { createOrderOnce, cancelOwnedOrder, advanceOrderStatus } from "../lib/orders";
 import { createUser, verifyCredentials } from "../lib/users";
 import { startSession, endSession, getSession } from "../lib/session";
 import { safeNext } from "../lib/safeNext";
@@ -62,7 +62,13 @@ export async function placeOrder(_previousState, formData) {
   if (items.some((item) => !item)) return { error: "One of the selected dishes is no longer available." };
 
   const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const order = createOrder({ ...result.data, items, total }, user.id);
+  const created = createOrderOnce(
+    { ...result.data, items, total },
+    user.id,
+    formData.get("idempotencyKey")
+  );
+  if (created.error) return created;
+  const order = created.order;
   revalidatePath("/orders/history");
   revalidatePath("/kitchen");
   revalidatePath("/admin", "layout");

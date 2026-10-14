@@ -1,17 +1,25 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
+import { useActionState, useTransition } from "react";
 import { signIn, signUp } from "./actions";
 
 export default function AuthForm({ mode, next }) {
   const isSignUp = mode === "signup";
-  const [state, formAction, pending] = useActionState(isSignUp ? signUp : signIn, {});
+  const [state, formAction, actionPending] = useActionState(isSignUp ? signUp : signIn, {});
+  const [submitting, startTransition] = useTransition();
+  const pending = actionPending || submitting;
+
+  function handleSubmit(event) {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    startTransition(() => formAction(formData));
+  }
   const errors = state?.fieldErrors ?? {};
   const otherPage = `${isSignUp ? "/signin" : "/signup"}?next=${encodeURIComponent(next)}`;
 
   return (
-    <form action={formAction} className="checkout-form auth-form">
+    <form onSubmit={handleSubmit} className="checkout-form auth-form">
       <input type="hidden" name="next" value={next} />
       {isSignUp && (
         <label>Full name<input name="name" autoComplete="name" required />{errors.name?.[0] && <small>{errors.name[0]}</small>}</label>

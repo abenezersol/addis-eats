@@ -24,7 +24,7 @@ export default async function OrderStatusPage({ params }) {
         <div>
           <span className="eyebrow">LIVE ORDER</span>
           <h1>Order status</h1>
-          <p>This first view is rendered on the server, then SWR keeps the status fresh in your browser.</p>
+          <p>Your order is rendered on the server first, then live status updates keep it current.</p>
         </div>
         <Link href="/orders/history" className="button secondary">Order history</Link>
       </div>

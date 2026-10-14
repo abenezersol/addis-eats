@@ -6,12 +6,19 @@ A food-ordering app for Addis Ababa built with the Next.js App Router. It grew f
 
 ```bash
 npm install
-cp .env.example .env.local         # optional: set STAFF_PASSWORD there
-npm run build
-npm run start                      # or: npm run dev
+cp .env.example .env.local
+npm test
+npm run dev
 ```
 
-Open http://localhost:3000. Dish photos are served from `public/images/` (add that folder from your earlier days if it is missing).
+Open http://localhost:3000. For a production build, configure all environment variables first, then run `npm run build` and `npm run start`. Dish photos are served from `public/images/` (add that folder from your earlier days if it is missing).
+
+### Environment variables
+
+- Local development can use the demo credentials documented below. Never use them in a public deployment.
+- Set `STAFF_PASSWORD`, `ADMIN_USERNAME`, and `ADMIN_PASSWORD` to unique strong values in Vercel Preview and Production settings. Production builds intentionally fail if these are missing or still use demo defaults.
+- Set `NEXT_PUBLIC_SITE_URL` separately: `http://localhost:3000` locally, the preview URL for Preview, and the real canonical domain for Production. It is public configuration, not a secret; changes require a new build/deployment.
+- Keep `.env.local` out of Git. `.gitignore` excludes local environment files, dependencies, and `.next/` output.
 
 ## Routes
 
@@ -26,9 +33,9 @@ Open http://localhost:3000. Dish photos are served from `public/images/` (add th
 | `/favorites` | Dishes you saved with the heart button (kept in this browser) | Public |
 | `/kitchen` | All orders, advance their status | Staff only |
 | `/admin/login` | Admin username + password sign-in | Public |
-| `/admin` | Dashboard: revenue, order count, average order value, top dishes, orders by status | Admin only |
+| `/admin` | Dashboard: revenue and orders-per-day charts, accessible chart data tables, revenue/order summaries, top dishes and order status | Admin only |
 | `/admin/dishes`, `/admin/dishes/new`, `/admin/dishes/[id]/edit` | Menu CRUD: search, add, edit, delete (with confirmation), switch a dish on/off | Admin only |
-| `/admin/orders`, `/admin/orders/[id]` | All orders, advance status, delete (with confirmation), full order details | Admin only |
+| `/admin/orders`, `/admin/orders/[id]` | Accessible order table with URL-based sorting and pagination, status filters, advance status, delete (with confirmation), full order details | Admin only |
 | `/api/dishes`, `/api/dishes/[id]` | Menu endpoints | Public |
 | `/api/orders`, `/api/orders/[id]` | Create an order; read your own order | Signed in |
 | `/api/me` | Who is signed in (`{ user }` or `{ user: null }`) | Public |
@@ -37,7 +44,7 @@ Open http://localhost:3000. Dish photos are served from `public/images/` (add th
 
 ## Admin area and favorites
 
-**Admin login:** open `/admin/login`. Default username `admin`, password `admin-demo-1234`. Set `ADMIN_USERNAME` and `ADMIN_PASSWORD` in `.env.local` (see `.env.example`) and restart the server. Always change them before deploying.
+**Admin login:** open `/admin/login`. Default username `admin`, password `admin-1234`. Set `ADMIN_USERNAME` and `ADMIN_PASSWORD` in `.env.local` (see `.env.example`) and restart the server. Always change them before deploying.
 
 | Feature | Where it lives |
 |---|---|
@@ -55,31 +62,18 @@ Dishes, like users and orders, are held in server memory: admin changes reset wh
 
 Favorites are stored per browser (localStorage), not per account.
 
-## Live URL
-
-**Deployed URL: _paste it here once deployed (see `DEPLOY.md`)_.** Nothing below counts as done until the evidence column has something in it.
-
-## Day 45 — the finishing pass
-
-| Area | Evidence | Where it is recorded |
-|---|---|---|
-| Accounts | Cookie flags (`HttpOnly`, `Secure`, `SameSite=Lax`, 7-day expiry) visible in DevTools → Application → Cookies after sign-in; the cookie is gone after sign-out | `AUTH.md` → How a session works |
-| Protection | Middleware, page check and an action/handler check on every private route | `AUTH.md` → Decision 1, then the layer table |
-| Ownership | Every query scoped to the session's own id; changing the id in `/orders/<id>` is a 404 | `AUTH.md` → Decision 1 |
-| The three attacks | `npm test` passes (attacks 2 and 3 as rules); live runs are pasted into the *Observed (live)* lines | `AUTH.md` → The three attacks |
-| Live data | One polled query (`/api/orders/${id}`, 5 s, seeded) and one debounced search (300 ms, null key); the menu browse query is seeded with exactly the API's answer | `DATA.md` |
-| Performance | Budget table with Before and After | `PERF.md` → Decision 3 |
-| Discovery | Metadata on every route, cards, sitemap, robots, JSON-LD | `SEO.md` |
-
-What changed in the code on Day 45:
-
-- `lib/menuQuery.js` is now the single function behind `/api/dishes` and the menu seed. Before, the seed held all 25 dishes while the API answered 6 per page, so the list changed shape after the first paint; now the seed is the API's own answer for the current category and page.
-- `startSession` removes the session the browser already held before creating the new one.
-- `tests/attacks.test.mjs` (`npm test`, Node 20.19+ or 22+) checks the rules behind attacks 2 and 3, scoped history, status advancing and the menu seed. It does not replace the live runs, and attack 1 (signed out) is run live because it needs a cookie jar.
-
-Not done in code, and said plainly: the **deployed URL**, the **live attack results**, the **First Load JS** and **largest image** numbers, and a **Lighthouse figure of 90**. Each has its row in the documents above, marked as not recorded.
-
 ### Demo accounts
 
-Create customer accounts on `/signup`. The seeded staff account is phone `0911000000` with the password `staff-demo-1234` (or `STAFF_PASSWORD` from `.env.local` if you set one; restart the server after changing it). Users, sessions and orders live in server memory and reset when the server restarts.
+Create customer accounts on `/signup`. The seeded staff account is phone `0911000000` with the password `staff-1234` (or `STAFF_PASSWORD` from `.env.local` if you set one; restart the server after changing it). Users, sessions and orders live in server memory and reset when the server restarts.
 
+## Day 48 — Event handling and deployment hardening
+
+- Auth, checkout, admin login, and dish forms use explicit `onSubmit` handlers, `FormData`, and pending states. They support keyboard form submission with Enter and prevent a second submit while an action is pending.
+- Checkout includes an idempotency key. The server action and `POST /api/orders` reuse the original order for an identical retry and reject key reuse with different payload data. Tests cover both cases.
+- Global `:focus-visible` styling provides a visible keyboard focus indicator. Favorite and cart quantity controls are at least 44 by 44 pixels; common action buttons have a 44px minimum height. Reduced-motion preferences are respected.
+- `NEXT_PUBLIC_SITE_URL` configures metadata, sitemap, robots, and social card URLs per environment. Production credentials are required and demo defaults are rejected in production.
+- Before shipping: run `npm test`, `npm run build`, and `npm run start`; test the live URL in a private window, test all admin/customer protection checks, keyboard navigation, a rapid double-submit, mobile touch targets, and social preview cards.
+
+**Production blocker:** users, sessions, dishes, orders, SSE events, and the idempotency-key registry still use process memory in this educational project. The idempotency protection is therefore effective only within the current running process. Before using this as a real public ordering service, move this state into a persistent database/shared store and enforce idempotency with a database unique constraint. Do not claim durable duplicate-order protection across server restarts or multiple Vercel instances until that migration is done.
+
+**Dependency reproducibility:** package versions are still expressed using `latest` for Next.js and React, and this source ZIP does not include a lockfile. Generate and commit `package-lock.json` with a successful `npm install` in an environment that can reach the npm registry, then pin/verify compatible versions before deployment. I did not invent versions while the registry was unavailable.

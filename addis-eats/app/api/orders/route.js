@@ -1,5 +1,5 @@
 import { orderSchema, fieldErrors } from "../../../lib/orderSchema";
-import { createOrder } from "../../../lib/orders";
+import { createOrderOnce } from "../../../lib/orders";
 import { getSession } from "../../../lib/session";
 import { getDish } from "../../../lib/dishStore";
 
@@ -31,9 +31,20 @@ export async function POST(request) {
     }
 
     const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-    const order = createOrder({ ...result.data, items, total }, user.id);
+    const created = createOrderOnce(
+      { ...result.data, items, total },
+      user.id,
+      request.headers.get("Idempotency-Key")
+    );
+    if (created.error) {
+      return Response.json({ error: created.error }, { status: created.status });
+    }
 
-    return Response.json({ id: order.id, total: order.total, currency: order.currency }, { status: 201 });
+    const order = created.order;
+    return Response.json(
+      { id: order.id, total: order.total, currency: order.currency, replayed: created.replayed },
+      { status: created.replayed ? 200 : 201 }
+    );
   } catch {
     return Response.json({ error: "Internal server error" }, { status: 500 });
   }

@@ -3,11 +3,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { safeNext, safeAdminNext } from "../lib/safeNext.js";
-import { createOrder, cancelOwnedOrder, getOrdersFor, advanceOrderStatus, deleteOrder, findOrder } from "../lib/orders.js";
+import { createOrder, createOrderOnce, cancelOwnedOrder, getOrdersFor, advanceOrderStatus, deleteOrder, findOrder } from "../lib/orders.js";
 import { queryDishes, PAGE_SIZE } from "../lib/menuQuery.js";
 import { dishes } from "../app/menu/dishes.js";
 import { getAllDishes, getAvailableDishes, createDish, updateDish, setDishAvailability, deleteDish, getDish } from "../lib/dishStore.js";
 import { getDashboardStats } from "../lib/stats.js";
+import { getDashboardChartData, formatETB } from "../lib/dashboardData.js";
 
 test("attack 3: a crafted next never leaves the site", () => {
   for (const value of ["https://example.com", "//example.com", "/\\example.com", "/\t/example.com", "javascript:alert(1)", undefined, ""]) {
@@ -106,6 +107,44 @@ test("dashboard: revenue, average, top dishes and status counts ignore cancelled
   assert.equal(getDashboardStats([]).averageOrderValue, 0);
 });
 
+test("Day 46 dashboard summaries group revenue and orders by day", () => {
+  const now = new Date(2026, 9, 13, 12, 0, 0);
+  const orders = [
+    { status: "delivered", total: 500, deliveryArea: "Bole", createdAt: "2026-10-02T10:00:00.000Z" },
+    { status: "pending", total: 300, deliveryArea: "Bole", createdAt: "2026-10-02T12:00:00.000Z" },
+    { status: "delivered", total: 700, deliveryArea: "Piazza", createdAt: "2026-10-03T09:00:00.000Z" },
+    { status: "cancelled", total: 9000, deliveryArea: "Bole", createdAt: "2026-10-03T09:00:00.000Z" }
+  ];
+  const summary = getDashboardChartData(orders, now);
+  assert.deepEqual(summary.revenueByNeighbourhood, [
+    { area: "Bole", revenue: 800 },
+    { area: "Piazza", revenue: 700 }
+  ]);
+  assert.equal(summary.ordersByDay.length, 13);
+  assert.equal(summary.ordersByDay.find((row) => row.date === "2026-10-02").orders, 2);
+  assert.equal(summary.ordersByDay.find((row) => row.date === "2026-10-03").orders, 2);
+  assert.equal(summary.monthLabel, "October 2026");
+  assert.match(formatETB(14200), /14,200/);
+});
+
+test("Day 46 revenue groups equivalent neighbourhood names and ignores invalid totals", () => {
+  const orders = [
+    { status: "delivered", total: 500, deliveryArea: "Bole" },
+    { status: "pending", total: 300, deliveryArea: " bole  " },
+    { status: "delivered", total: 200, deliveryArea: "BOLE" },
+    { status: "delivered", total: 100, deliveryArea: "Bole    Atlas" },
+    { status: "delivered", total: 700, deliveryArea: "Piazza" },
+    { status: "cancelled", total: 9000, deliveryArea: "Bole" },
+    { status: "delivered", total: "not-a-number", deliveryArea: "Piazza" }
+  ];
+
+  assert.deepEqual(getDashboardChartData(orders).revenueByNeighbourhood, [
+    { area: "Bole", revenue: 1000 },
+    { area: "Piazza", revenue: 700 },
+    { area: "Bole Atlas", revenue: 100 }
+  ]);
+});
+
 test("menu seed equals the API answer shape", () => {
   const first = queryDishes(dishes, { page: 1 });
   assert.equal(first.data.length, PAGE_SIZE);
@@ -116,4 +155,51 @@ test("menu seed equals the API answer shape", () => {
   assert.equal(queryDishes(dishes, { page: 999 }).page, first.totalPages); // clamped, like the route
   assert.equal(queryDishes(dishes, { q: "  KITFO " }).total, 1);
   assert.equal(queryDishes(dishes, { q: "zzzz" }).data.length, 0);
+});
+
+
+import { csvCell, ordersToCsv } from "../lib/csv.js";
+import { etb, when, relative } from "../lib/format.js";
+
+test("Day 47 CSV escapes commas, quotes, and newlines without shifting columns", () => {
+  assert.equal(csvCell('Bole, "Kitfo"\nHouse'), '"Bole, ""Kitfo""\nHouse"');
+  assert.equal(csvCell(null), "");
+  const csv = ordersToCsv([{
+    id: "ord_test", createdAt: "2026-10-13T10:00:00.000Z", status: "pending",
+    customerName: 'Abebe, "A"', phone: "0911000000", deliveryArea: "Bole\nAtlas",
+    total: 100, items: [{ quantity: 1, name: 'Doro "Special"', price: 100 }]
+  }]);
+  assert.match(csv, /"Abebe, ""A"""/);
+  assert.match(csv, /"Bole\nAtlas"/);
+  assert.match(csv, /"1 x Doro ""Special"""/);
+});
+
+test("Day 47 shared locale formatters are available", () => {
+  assert.match(etb.format(14200), /14,200/);
+  assert.ok(when.format(new Date("2026-10-13T15:40:00Z")).length > 0);
+  assert.equal(relative.format(-12, "minute"), "12 minutes ago");
+});
+
+
+test("Day 48 duplicate order submissions return the same order", () => {
+  const userId = "usr_idempotency_test";
+  const key = "checkout-test-key-001";
+  const data = { customerName: "Test Customer", items: [{ id: 1, quantity: 1 }], total: 100 };
+  const first = createOrderOnce(data, userId, key);
+  const retry = createOrderOnce(data, userId, key);
+
+  assert.equal(first.error, undefined);
+  assert.equal(retry.error, undefined);
+  assert.equal(first.order.id, retry.order.id);
+  assert.equal(retry.replayed, true);
+  assert.equal(getOrdersFor(userId).filter((order) => order.id === first.order.id).length, 1);
+});
+
+test("Day 48 idempotency keys cannot be reused for different order data", () => {
+  const userId = "usr_idempotency_conflict";
+  const key = "checkout-conflict-key-01";
+  createOrderOnce({ total: 100, items: [] }, userId, key);
+  const conflict = createOrderOnce({ total: 200, items: [] }, userId, key);
+  assert.equal(conflict.status, 409);
+  assert.match(conflict.error, /different order details/);
 });

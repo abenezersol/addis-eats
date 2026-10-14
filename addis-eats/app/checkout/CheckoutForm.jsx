@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useId, useTransition } from "react";
 import { placeOrder } from "../actions";
 import { useCart } from "../providers";
 
@@ -8,18 +8,28 @@ const AREAS = ["Lebu", "Piazza", "Kazanchis", "CMC", "Bole", "Mexico"];
 
 export default function CheckoutForm({ customerName, phone }) {
   const { items, clearCart } = useCart();
-  const [state, formAction, pending] = useActionState(async (previous, formData) => {
+  const submissionId = useId();
+  const [submitting, startTransition] = useTransition();
+  const [state, formAction, actionPending] = useActionState(async (previous, formData) => {
     const result = await placeOrder(previous, formData);
     if (result?.success) clearCart();
     return result;
   }, {});
+  const pending = submitting || actionPending;
   const errors = state?.fieldErrors ?? {};
+
+  function handleSubmit(event) {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    startTransition(() => formAction(formData));
+  }
 
   const payload = JSON.stringify(items.map(({ id, quantity }) => ({ id, quantity })));
 
   return (
-    <form action={formAction} className="checkout-form">
+    <form onSubmit={handleSubmit} className="checkout-form">
       <input type="hidden" name="items" value={payload} />
+      <input type="hidden" name="idempotencyKey" value={`checkout-${submissionId}`} />
       <div className="form-section">
         <span className="eyebrow">DELIVERY DETAILS</span>
         <h2>Where should we deliver?</h2>

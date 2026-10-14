@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useState } from "react";
+import { useActionState, useState, useTransition } from "react";
 import { saveDish } from "./actions";
 
 const CATEGORY_OPTIONS = ["starters", "mains", "desserts", "drinks"];
@@ -9,7 +9,15 @@ const CATEGORY_OPTIONS = ["starters", "mains", "desserts", "drinks"];
 // One form for "add" and "edit". Fields are controlled so a failed save keeps what the admin typed.
 export default function DishForm({ dish }) {
   const isEdit = Boolean(dish);
-  const [state, formAction, pending] = useActionState(saveDish, {});
+  const [state, formAction, actionPending] = useActionState(saveDish, {});
+  const [submitting, startTransition] = useTransition();
+  const pending = actionPending || submitting;
+
+  function handleSubmit(event) {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    startTransition(() => formAction(formData));
+  }
   const errors = state?.fieldErrors ?? {};
   const [values, setValues] = useState({
     name: dish?.name ?? "",
@@ -27,7 +35,7 @@ export default function DishForm({ dish }) {
   }
 
   return (
-    <form action={formAction} className="checkout-form admin-form">
+    <form onSubmit={handleSubmit} className="checkout-form admin-form">
       {isEdit && <input type="hidden" name="id" value={dish.id} />}
 
       <div className="form-grid">

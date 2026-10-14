@@ -1,4 +1,4 @@
-# Addis Eats — Data Map (Day 41, finalised Day 45)
+# Addis Eats — Data Map 
 
 | Query | Key | Refresh rule | Reasoning |
 |---|---|---|---|

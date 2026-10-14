@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect } from "react";
+import { useActionState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { adminSignIn } from "./actions";
 import { useAdmin } from "./AdminProvider";
@@ -8,7 +8,15 @@ import { useAdmin } from "./AdminProvider";
 export default function AdminLoginForm({ next }) {
   const router = useRouter();
   const { login } = useAdmin();
-  const [state, formAction, pending] = useActionState(adminSignIn, {});
+  const [state, formAction, actionPending] = useActionState(adminSignIn, {});
+  const [submitting, startTransition] = useTransition();
+  const pending = actionPending || submitting;
+
+  function handleSubmit(event) {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    startTransition(() => formAction(formData));
+  }
   const errors = state?.fieldErrors ?? {};
 
   // On success the server has set the cookie. Put the admin into context (and sessionStorage), then go on.
@@ -20,7 +28,7 @@ export default function AdminLoginForm({ next }) {
   }, [state, login, router]);
 
   return (
-    <form action={formAction} className="checkout-form auth-form">
+    <form onSubmit={handleSubmit} className="checkout-form auth-form">
       <input type="hidden" name="next" value={next} />
       <label>
         Username
